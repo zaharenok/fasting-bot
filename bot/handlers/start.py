@@ -16,19 +16,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     text = (
-        f"👋 Привет, {user.first_name or 'друг'}!\n\n"
-        "Этот бот помогает отслеживать, сколько времени ты без еды.\n"
-        "Просто нажимай команды, а я считаю.\n\n"
-        "🕐 <b>Команды:</b>\n"
-        "/fast — начать голодание\n"
-        "/eat — закончить голодание (поел)\n"
-        "/status — сколько уже без еды\n"
-        "/stats — твоя статистика\n"
-        "/history — история фастов\n"
-        "/dashboard — веб-дашборд с графиками\n"
-        "/premium — премиум (безлимитная история + планы)\n"
-        "/cancel — отменить текущий фаст\n\n"
-        "Просто попробуй — нажми /fast когда последний раз поел 😉"
+        f"👋 <b>Привет, {user.first_name or 'друг'}!</b>\n\n"
+        "Этот бот помогает отслеживать время без еды.\n"
+        "Нажимай команды — я считаю.\n\n"
+        "🕐 <b>Команды</b>\n"
+        "▸ /fast — начать голодание\n"
+        "▸ /eat — поел, закончить голод\n"
+        "▸ /status — сколько уже без еды\n"
+        "▸ /stats — статистика\n"
+        "▸ /history — история фастов\n"
+        "▸ /cancel — отменить текущий фаст\n\n"
+        "Попробуй: нажми <b>/fast</b> когда последний раз поел 😉"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -38,7 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ],
         [
             InlineKeyboardButton("📊 Статистика", callback_data="cmd_stats"),
-            InlineKeyboardButton("🌐 Дашборд", callback_data="cmd_dashboard"),
+            InlineKeyboardButton("📋 История", callback_data="cmd_history"),
         ],
     ])
 

@@ -22,23 +22,33 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if hours >= 24:
             days, hours = divmod(hours, 24)
 
-        text = "⏳ <b>Ты без еды</b>\n"
+        text = "⏳ <b>Ты без еды уже</b>\n"
         if days > 0:
             text += f"<b>{days}д {hours}ч {mins}м</b>\n"
         elif hours > 0:
             text += f"<b>{hours}ч {mins}м</b>\n"
         else:
             text += f"<b>{mins}м</b>\n"
-        text += f"С {started.strftime('%H:%M %d.%m')}"
+        text += f"\nС <code>{started.strftime('%H:%M %d.%m')}</code>"
 
         # Milestone motivation
-        milestones = [12 * 60, 16 * 60, 18 * 60, 24 * 60, 48 * 60, 72 * 60]
-        for m in milestones:
+        milestones = [
+            (12 * 60, "12ч — начало аутофагии 🔄"),
+            (16 * 60, "16ч — жиросжигание 🔥"),
+            (18 * 60, "18ч — пик аутофагии ⚡"),
+            (24 * 60, "24ч — 1 сутки! 🏆"),
+            (48 * 60, "48ч — глубокая перезагрузка 🧠"),
+            (72 * 60, "72ч — 3 дня! 💪"),
+        ]
+        for m, label in milestones:
             if duration < m:
                 remaining = m - duration
-                text += f"\n🎯 До {m//60}ч: {format_duration(remaining)}"
+                text += f"\n🎯 <b>{label}</b> через {format_duration(remaining)}"
                 break
     else:
-        text = "🍽 Сейчас ты не голодаешь.\nНажми /fast, чтобы начать."
+        text = (
+            "🍽 <b>Сейчас ты не голодаешь.</b>\n\n"
+            "Нажми /fast, чтобы начать отсчёт."
+        )
 
     await update.message.reply_text(text, parse_mode="HTML")

@@ -5,6 +5,7 @@ Start: python -m bot.main
 """
 
 import logging
+import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -32,7 +33,7 @@ from bot.handlers.stats import cmd_stats
 from bot.handlers.history import cmd_history
 from bot.handlers.dashboard import cmd_dashboard
 from bot.db import get_active_fast, start_fast
-from bot.handlers.fast import _parse_time
+from bot.handlers.fast import _parse_time, _action_keyboard
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -49,6 +50,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmd_map = {
         "cmd_fast": cmd_fast,
         "cmd_eat": cmd_eat,
+        "cmd_cancel": cmd_cancel,
         "cmd_status": cmd_status,
         "cmd_stats": cmd_stats,
         "cmd_dashboard": cmd_dashboard,
@@ -65,42 +67,56 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def custom_time_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle free-text time input after user tapped 'Своё время'."""
+    """Handle free-text time input (after tapping 'Своё время' or typing raw time)."""
     user_id = update.effective_user.id
+    text = update.message.text.strip()
 
-    # Only respond if there's no active fast (user is in "choosing time" state)
-    active = get_active_fast(user_id)
-    if active:
-        return  # normal fast, ignore
+    # Only respond if looks like a time input
+    time_patterns = [
+        r'^\d{1,2}:\d{2}',                          # 14:30
+        r'^\d{1,2}:\d{2}\s+вчера',                   # 14:30 вчера
+        r'^\d+\s*(ч|час|часа|часов|h|м|мин|минут)',  # 2 часа, 30 минут
+        r'^\d{4}-\d{2}-\d{2}'
+    ]
+    if not any(re.match(p, text.lower()) for p in time_patterns):
+        return  # not a time input, ignore
 
-    text = update.message.text
     parsed = _parse_time(text)
-    if parsed:
-        record = start_fast(user_id, started_at=parsed)
-        started_ts = record["started_at"].replace("Z", "+00:00")
-        from datetime import datetime as dt2
-        started = dt2.fromisoformat(started_ts)
-        reply = (
-            "🕐 <b>Голодание начато!</b>\n"
-            f"Время: {started.strftime('%H:%M %d.%m')}\n"
-            "⏪ <i>Время установлено вручную</i>\n\n"
-            "Нажми /eat когда начнёшь есть."
-        )
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat")],
-            [InlineKeyboardButton("📊 Статус /status", callback_data="cmd_status")],
-        ])
-        await update.message.reply_text(reply, parse_mode="HTML", reply_markup=keyboard)
-    else:
-        reply = (
-            "❌ Не понял время. Попробуй ещё раз:\n\n"
+    if not parsed:
+        await update.message.reply_text(
+            "❌ <b>Не понял время.</b>\n\n"
+            "Попробуй:\n"
             "<code>14:30</code> — сегодня\n"
             "<code>2 часа назад</code>\n"
-            "<code>вчера 18:00</code>\n"
-            "<code>2026-07-07 12:00</code>\n\n"
-            "Или напиши /cancel чтобы отменить."
+            "<code>вчера 18:00</code>",
+            parse_mode="HTML",
         )
-        await update.message.reply_text(reply, parse_mode="HTML")
+        return
+
+    # Check for active fast
+    active = get_active_fast(user_id)
+    if active:
+        await update.message.reply_text(
+            "⚠️ <b>Ты уже голодаешь!</b>\n"
+            "Сначала заверши /eat или отмени /cancel.",
+            parse_mode="HTML",
+        )
+        return
+
+    record = start_fast(user_id, started_at=parsed)
+    from datetime import datetime as dt2, timezone as tz2
+    started = dt2.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+    now = dt2.now(tz2.utc)
+    dur = int((now - started).total_seconds() / 60)
+
+    from bot.utils import format_duration
+    reply = (
+        "🕐 <b>Голодание начато!</b>\n\n"
+        f"Последний приём пищи: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+        f"⏳ <b>Ты уже {format_duration(dur)} без еды</b>\n\n"
+        "Нажми /eat когда поешь."
+    )
+    await update.message.reply_text(reply, parse_mode="HTML", reply_markup=_action_keyboard())
 
 
 def main():
@@ -127,7 +143,7 @@ def main():
     # Other inline buttons
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    # Free-text time input (after tapping "Своё время" or typing /fast without button)
+    # Free-text time input (e.g. "14:30", "2 часа назад")
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_time_text))
 
     logger.info("Bot started polling...")

@@ -16,16 +16,16 @@ def _selector_page1() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton("⚡ Сейчас", callback_data="fast_set:0"),
-            InlineKeyboardButton("30 мин", callback_data="fast_set:30"),
-            InlineKeyboardButton("1 час", callback_data="fast_set:60"),
+            InlineKeyboardButton("30 мин назад", callback_data="fast_set:30"),
+            InlineKeyboardButton("1 час назад", callback_data="fast_set:60"),
         ],
         [
-            InlineKeyboardButton("2 часа", callback_data="fast_set:120"),
-            InlineKeyboardButton("4 часа", callback_data="fast_set:240"),
-            InlineKeyboardButton("8 часов", callback_data="fast_set:480"),
+            InlineKeyboardButton("2 часа назад", callback_data="fast_set:120"),
+            InlineKeyboardButton("4 часа назад", callback_data="fast_set:240"),
+            InlineKeyboardButton("8 часов назад", callback_data="fast_set:480"),
         ],
         [
-            InlineKeyboardButton("12 часов", callback_data="fast_set:720"),
+            InlineKeyboardButton("12 часов назад", callback_data="fast_set:720"),
             InlineKeyboardButton("▶️ Ещё →", callback_data="fast_more"),
         ],
     ]
@@ -37,8 +37,8 @@ def _selector_page2() -> InlineKeyboardMarkup:
     keyboard = [
         [
             InlineKeyboardButton("📅 Вчера", callback_data="fast_set:1440"),
-            InlineKeyboardButton("2 дня", callback_data="fast_set:2880"),
-            InlineKeyboardButton("3 дня", callback_data="fast_set:4320"),
+            InlineKeyboardButton("2 дня назад", callback_data="fast_set:2880"),
+            InlineKeyboardButton("3 дня назад", callback_data="fast_set:4320"),
         ],
         [
             InlineKeyboardButton("✏️ Своё время", callback_data="fast_custom"),
@@ -47,6 +47,18 @@ def _selector_page2() -> InlineKeyboardMarkup:
     ]
     return InlineKeyboardMarkup(keyboard)
 
+
+def _action_keyboard() -> InlineKeyboardMarkup:
+    """Standard post-start/eat keyboard."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat"),
+         InlineKeyboardButton("📊 Статус /status", callback_data="cmd_status")],
+        [InlineKeyboardButton("📋 История /history", callback_data="cmd_history"),
+         InlineKeyboardButton("📈 Статистика /stats", callback_data="cmd_stats")],
+    ])
+
+
+# ─── Time parsing ────────────────────────────────────────────
 
 def _parse_time(text: str) -> str | None:
     """Parse user-friendly time string into ISO datetime.
@@ -99,7 +111,7 @@ def _parse_time(text: str) -> str | None:
     return None
 
 
-# ─── Handlers ────────────────────────────────────────────────
+# ─── Commands ────────────────────────────────────────────────
 
 async def cmd_fast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start a new fasting period.
@@ -114,107 +126,42 @@ async def cmd_fast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         started = datetime.fromisoformat(active["started_at"].replace("Z", "+00:00"))
         duration = int((datetime.now(timezone.utc) - started).total_seconds() / 60)
         text = (
-            "⚠️ Ты уже голодаешь!\n"
-            f"Начало: {started.strftime('%H:%M %d.%m')}\n"
-            f"Длительность: {format_duration(duration)}\n\n"
+            "⚠️ <b>Ты уже голодаешь!</b>\n"
+            f"Начало: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+            f"⏳ Длится: <b>{format_duration(duration)}</b>\n\n"
             "Нажми /eat когда поешь, или /cancel чтобы отменить."
         )
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🍽 /eat — Поел", callback_data="cmd_eat")],
-            [InlineKeyboardButton("📊 /status — Статус", callback_data="cmd_status")],
+            [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat")],
+            [InlineKeyboardButton("🗑 Отменить /cancel", callback_data="cmd_cancel")],
         ])
-    else:
-        # Check if user passed a time argument (e.g. /fast 14:30)
-        args = context.args
-        if args:
-            custom_time = _parse_time(" ".join(args))
-            if custom_time:
-                await _start_fast_with_time(update, user_id, custom_time)
-                return
-            else:
-                text = "❌ Не понял время. Примеры:\n/fast 14:30\n/fast 2 часа назад\n/fast вчера 18:00"
-                await _reply(update, text)
-                return
-
-        # Show time selector
-        text = "🕐 Когда ты последний раз ел?\nВыбери время начала голодания:"
-        keyboard = _selector_page1()
-
-    await _reply(update, text, keyboard)
-
-
-async def show_selector(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show page 1 of time selector (called from 'fast_selector')."""
-    text = "🕐 Когда ты последний раз ел?\nВыбери время начала голодания:"
-    await _edit(update, text, _selector_page1())
-
-
-async def show_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show page 2 of time selector (earlier dates)."""
-    text = "📅 Вчера или раньше:"
-    await _edit(update, text, _selector_page2())
-
-
-async def handle_fast_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle fast_set:MINUTES callback — start fast N minutes ago."""
-    query = update.callback_query
-    minutes_ago = int(query.data.split(":")[1])
-    user_id = update.effective_user.id
-
-    now = datetime.now(timezone.utc)
-    started_at = (now - timedelta(minutes=minutes_ago)).isoformat()
-
-    await _start_fast_with_time(update, user_id, started_at, edit=True)
-
-
-async def handle_custom_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Prompt user to type their own time."""
-    text = (
-        "✏️ Напиши время начала голодания.\n\n"
-        "Форматы:\n"
-        "<code>14:30</code> — сегодня в 14:30\n"
-        "<code>14:30 вчера</code>\n"
-        "<code>2 часа назад</code>\n"
-        "<code>30 минут назад</code>\n"
-        "<code>2026-07-07 12:00</code>"
-    )
-    await _edit(update, text, InlineKeyboardMarkup([
-        [InlineKeyboardButton("← К выбору времени", callback_data="fast_selector")]
-    ]))
-
-
-async def _start_fast_with_time(update: Update, user_id: int, started_at: str, edit: bool = False):
-    """Start fast and show confirmation."""
-    # Check again (race condition)
-    active = get_active_fast(user_id)
-    if active:
-        started = datetime.fromisoformat(active["started_at"].replace("Z", "+00:00"))
-        duration = int((datetime.now(timezone.utc) - started).total_seconds() / 60)
-        text = (
-            "⚠️ Ты уже голодаешь!\n"
-            f"Начало: {started.strftime('%H:%M %d.%m')}\n"
-            f"Длительность: {format_duration(duration)}"
-        )
-    else:
-        record = start_fast(user_id, started_at=started_at)
-        started = datetime.fromisoformat(record["started_at"].replace("Z", "+00:00"))
-        text = (
-            "🕐 <b>Голодание начато!</b>\n"
-            f"Время: {started.strftime('%H:%M %d.%m')}\n"
-        )
-        if started_at:
-            text += "⏪ <i>Время установлено вручную</i>\n"
-        text += "\nНажми /eat когда начнёшь есть."
-
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🍽 /eat — Поел", callback_data="cmd_eat")],
-        [InlineKeyboardButton("📊 /status — Статус", callback_data="cmd_status")],
-    ])
-
-    if edit:
-        await _edit(update, text, keyboard)
-    else:
         await _reply(update, text, keyboard)
+        return
+
+    # Check if user passed a time argument (e.g. /fast 14:30)
+    args = context.args
+    if args:
+        custom_time = _parse_time(" ".join(args))
+        if custom_time:
+            await _start_fast_and_reply(update, user_id, custom_time)
+            return
+        text = (
+            "❌ <b>Не понял время</b>\n\n"
+            "Примеры:\n"
+            "<code>/fast 14:30</code> — сегодня в 14:30\n"
+            "<code>/fast 2 часа назад</code>\n"
+            "<code>/fast вчера 18:00</code>"
+        )
+        await _reply(update, text)
+        return
+
+    # Show time selector
+    text = (
+        "🕐 <b>Когда ты последний раз ел?</b>\n\n"
+        "Нажми на кнопку — сколько времени прошло с тех пор.\n"
+        "👇"
+    )
+    await _reply(update, text, _selector_page1())
 
 
 async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -223,7 +170,7 @@ async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     record = end_fast(user_id)
 
     if not record:
-        text = "❌ Нет активного голодания. Начни с /fast"
+        text = "❌ <b>Нет активного голодания.</b> Начни с /fast"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🕐 Начать фаст", callback_data="cmd_fast")]
         ])
@@ -238,22 +185,16 @@ async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = (
             "🍽 <b>Фаст завершён!</b>\n"
-            f"Длительность: <b>{format_duration(duration_min)}</b>\n"
-            f"Начало: {started.strftime('%H:%M %d.%m')}\n"
-            f"Конец: {ended.strftime('%H:%M %d.%m')}\n\n"
+            f"⏳ Длился: <b>{format_duration(duration_min)}</b>\n"
         )
-
         if duration_min >= best and best > 0:
             text += "🏆 <b>Новый рекорд!</b> Ты никогда не был так долго без еды!\n"
-        else:
-            text += f"🏆 Лучший результат: {format_duration(best)}\n"
 
-        text += f"📊 Средний фаст: {format_duration(int(avg))}"
-
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🕐 Начать новый фаст", callback_data="cmd_fast")],
-            [InlineKeyboardButton("📊 Статистика", callback_data="cmd_stats")],
-        ])
+        text += (
+            f"\n📊 Средний фаст: <b>{format_duration(int(avg))}</b>\n"
+            f"🏆 Рекорд: <b>{format_duration(best)}</b>"
+        )
+        keyboard = _action_keyboard()
 
     await _reply(update, text, keyboard)
 
@@ -264,11 +205,99 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     if db_cancel(user_id):
-        text = "🗑 Текущий фаст отменён. Данные не сохранены."
+        text = "🗑 <b>Текущий фаст отменён.</b> Данные не сохранены."
     else:
         text = "❌ Нет активного фаста для отмены."
 
     await _reply(update, text)
+
+
+# ─── Time selector callbacks ─────────────────────────────────
+
+async def show_selector(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show page 1 of time selector."""
+    await update.callback_query.answer()
+    text = (
+        "🕐 <b>Когда ты последний раз ел?</b>\n\n"
+        "Нажми на кнопку — сколько времени прошло с тех пор.\n"
+        "👇"
+    )
+    await _edit(update, text, _selector_page1())
+
+
+async def show_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show page 2 of time selector (earlier dates)."""
+    await update.callback_query.answer()
+    text = (
+        "📅 <b>Вчера или раньше</b>\n\n"
+        "Выбери, сколько дней назад был последний приём пищи:\n"
+        "👇"
+    )
+    await _edit(update, text, _selector_page2())
+
+
+async def handle_fast_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle fast_set:MINUTES callback — start fast N minutes ago."""
+    query = update.callback_query
+    await query.answer()
+    minutes_ago = int(query.data.split(":")[1])
+    user_id = update.effective_user.id
+
+    now = datetime.now(timezone.utc)
+    started_at = (now - timedelta(minutes=minutes_ago)).isoformat()
+
+    await _start_fast_and_reply(update, user_id, started_at, edit=True)
+
+
+async def handle_custom_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Prompt user to type their own time."""
+    await update.callback_query.answer()
+    text = (
+        "✏️ <b>Напиши время начала голодания</b>\n\n"
+        "Форматы (пиши прямо в чат):\n"
+        "• <code>14:30</code> — сегодня в 14:30\n"
+        "• <code>14:30 вчера</code> — вчера\n"
+        "• <code>2 часа назад</code>\n"
+        "• <code>30 минут назад</code>\n"
+        "• <code>2026-07-07 12:00</code>\n\n"
+        "👇"
+    )
+    await _edit(update, text, InlineKeyboardMarkup([
+        [InlineKeyboardButton("← К выбору времени", callback_data="fast_selector")]
+    ]))
+
+
+# ─── Core logic ──────────────────────────────────────────────
+
+async def _start_fast_and_reply(update: Update, user_id: int, started_at: str, edit: bool = False):
+    """Start fast and show confirmation."""
+    active = get_active_fast(user_id)
+    if active:
+        started = datetime.fromisoformat(active["started_at"].replace("Z", "+00:00"))
+        duration = int((datetime.now(timezone.utc) - started).total_seconds() / 60)
+        text = (
+            "⚠️ <b>Ты уже голодаешь!</b>\n"
+            f"Начало: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+            f"⏳ Длится: <b>{format_duration(duration)}</b>"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat")],
+        ])
+    else:
+        record = start_fast(user_id, started_at=started_at)
+        started = datetime.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+        text = (
+            "🕐 <b>Голодание начато!</b>\n\n"
+            f"Последний приём пищи: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+            f"⏳ <b>Ты уже {format_duration(int((datetime.now(timezone.utc) - started).total_seconds() / 60))} без еды</b>\n\n"
+            "Нажми /eat когда поешь."
+        )
+        keyboard = _action_keyboard()
+
+    if edit:
+        await _edit(update, text, keyboard)
+    else:
+        await _reply(update, text, keyboard)
 
 
 # ─── Reply helpers ───────────────────────────────────────────
@@ -276,12 +305,19 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def _edit(update: Update, text: str, keyboard=None):
     """Edit the current inline message."""
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        except Exception:
+            pass
 
 
 async def _reply(update: Update, text: str, keyboard=None):
     """Reply to message or callback query."""
     if update.callback_query:
-        await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        except Exception:
+            pass
     else:
-        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
+        if update.message:
+            await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)

@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.db import get_fast_history
-from bot.utils import format_duration, format_datetime
+from bot.utils import format_duration
 
 
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -14,18 +14,15 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fasts = get_fast_history(user_id)
 
     if not fasts:
-        text = "📋 История пуста. Заверши свой первый фаст с /eat!"
+        text = "📋 <b>История пуста.</b>\n\nЗаверши первый фаст командой /eat!"
     else:
-        text = f"📋 <b>Последние {len(fasts)} фастов</b>\n"
-        text += "```\n"  # mono for clean table
+        text = f"📋 <b>Последние {len(fasts)} фастов</b>\n\n"
 
         for f in fasts:
             ended = datetime.fromisoformat(f["ended_at"].replace("Z", "+00:00"))
             dur = format_duration(f["duration_minutes"])
             date = ended.strftime("%d.%m")
-            text += f"{date}  {dur:>8}\n"
-
-        text += "```"
+            text += f"▸ {date} — <b>{dur}</b>\n"
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📊 Статистика", callback_data="cmd_stats"),

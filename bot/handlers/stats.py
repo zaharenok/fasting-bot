@@ -13,7 +13,7 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_stats(user_id)
 
     if not stats or stats.get("total_fasts", 0) == 0:
-        text = "📊 Пока нет данных. Заверши свой первый фаст, и статистика появится!"
+        text = "📊 <b>Пока нет данных.</b>\n\nЗаверши первый фаст — и статистика появится!"
     else:
         total = stats.get("total_fasts", 0)
         avg = int(stats.get("avg_duration_minutes", 0) or 0)
@@ -24,10 +24,10 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         text = (
             "📊 <b>Твоя статистика</b>\n\n"
-            f"📌 Всего фастов: <b>{total}</b>\n"
-            f"⏱ Общее время: <b>{format_duration(total_dur)}</b>\n"
-            f"📏 Средняя длина: <b>{format_duration(avg)}</b>\n"
-            f"🏆 Рекорд: <b>{format_duration(longest)}</b>\n"
+            f"📌 Всего фастов:      <b>{total}</b>\n"
+            f"⏱ Общее время:       <b>{format_duration(total_dur)}</b>\n"
+            f"📏 Средняя длина:    <b>{format_duration(avg)}</b>\n"
+            f"🏆 Рекорд:            <b>{format_duration(longest)}</b>\n"
         )
 
         if current:
