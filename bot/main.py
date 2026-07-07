@@ -27,6 +27,8 @@ from bot.handlers.fast import (
     show_more,
     handle_fast_set,
     handle_custom_time as fast_handle_custom,
+    handle_cancel_confirm,
+    handle_cancel_abort,
 )
 from bot.handlers.status import cmd_status
 from bot.handlers.stats import cmd_stats
@@ -189,6 +191,10 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_feeling, pattern=r"^feel:"))
     app.add_handler(CallbackQueryHandler(handle_energy, pattern=r"^energy:\d+$"))
     app.add_handler(CallbackQueryHandler(feel_stats, pattern=r"^feel_stats$"))
+
+    # Cancel confirmation
+    app.add_handler(CallbackQueryHandler(handle_cancel_confirm, pattern=r"^cancel_confirm$"))
+    app.add_handler(CallbackQueryHandler(handle_cancel_abort, pattern=r"^cancel_abort$"))
 
     # Other inline buttons
     app.add_handler(CallbackQueryHandler(button_callback))

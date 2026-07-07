@@ -200,16 +200,69 @@ async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Cancel current active fast."""
+    """Cancel current active fast — with confirmation."""
     from bot.db import cancel_fast as db_cancel
 
     user_id = update.effective_user.id
-    if db_cancel(user_id):
-        text = "🗑 <b>Текущий фаст отменён.</b> Данные не сохранены."
-    else:
+    active = get_active_fast(user_id)
+    if not active:
         text = "❌ Нет активного фаста для отмены."
+        await _reply(update, text)
+        return
 
-    await _reply(update, text)
+    text = (
+        "🗑 <b>Точно отменить фаст?</b>\n\n"
+        "Все данные текущего голодания будут удалены без сохранения."
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Да, отменить", callback_data="cancel_confirm"),
+         InlineKeyboardButton("🔙 Нет, оставить", callback_data="cancel_abort")],
+    ])
+    await _reply(update, text, keyboard)
+
+
+async def handle_cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirm cancel — actually delete the fast."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    from bot.db import cancel_fast as db_cancel
+
+    if db_cancel(user_id):
+        await query.edit_message_text(
+            "🗑 <b>Фаст отменён.</b> Данные не сохранены.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🕐 Начать новый фаст", callback_data="cmd_fast")],
+            ]),
+        )
+    else:
+        await query.edit_message_text("❌ Ошибка при отмене.", parse_mode="HTML")
+
+
+async def handle_cancel_abort(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Abort cancel — keep the fast going."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+
+    active = get_active_fast(user_id)
+    if active:
+        from datetime import datetime as dt, timezone as tz
+        started = dt.fromisoformat(active["started_at"].replace("Z", "+00:00"))
+        duration = int((dt.now(tz.utc) - started).total_seconds() / 60)
+        text = (
+            "👍 <b>Продолжаем голодание!</b>\n"
+            f"⏳ Длится: {format_duration(duration)}"
+        )
+    else:
+        text = "👍 Продолжаем!"
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat"),
+         InlineKeyboardButton("📊 Статус /status", callback_data="cmd_status")],
+    ])
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 # ─── Time selector callbacks ─────────────────────────────────

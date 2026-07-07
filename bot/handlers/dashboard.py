@@ -12,7 +12,8 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     token_data = create_dashboard_token(user_id)
     if not token_data:
-        await update.message.reply_text("❌ Не удалось создать ссылку. Попробуй позже.")
+        text = "❌ Не удалось создать ссылку. Попробуй позже."
+        await _reply(update, text)
         return
 
     token = token_data["token"]
@@ -29,4 +30,14 @@ async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🌐 Открыть дашборд", url=url)]
     ])
 
-    await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard, disable_web_page_preview=True)
+    await _reply(update, text, keyboard)
+
+
+async def _reply(update: Update, text: str, keyboard=None):
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard, disable_web_page_preview=True)
+        except Exception:
+            pass
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard, disable_web_page_preview=True)

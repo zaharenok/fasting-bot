@@ -1,6 +1,6 @@
 """Handler for /stats command."""
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.db import get_stats
@@ -33,4 +33,20 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if current:
             text += f"\n🕐 <i>Текущий фаст: {format_duration(current_min)}</i>"
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 История", callback_data="cmd_history"),
+         InlineKeyboardButton("🌐 Дашборд", callback_data="cmd_dashboard")],
+        [InlineKeyboardButton("📝 Чекин /checkin", callback_data="cmd_checkin")],
+    ])
+
+    await _reply(update, text, keyboard)
+
+
+async def _reply(update: Update, text: str, keyboard=None):
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        except Exception:
+            pass
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)

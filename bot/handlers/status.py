@@ -1,7 +1,7 @@
 """Handler for /status command."""
 
 from datetime import datetime, timezone
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.db import get_active_fast
@@ -31,7 +31,6 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
             text += f"<b>{mins}м</b>\n"
         text += f"\nС <code>{started.strftime('%H:%M %d.%m')}</code>"
 
-        # Milestone motivation
         milestones = [
             (12 * 60, "12ч — начало аутофагии 🔄"),
             (16 * 60, "16ч — жиросжигание 🔥"),
@@ -45,10 +44,25 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 remaining = m - duration
                 text += f"\n🎯 <b>{label}</b> через {format_duration(remaining)}"
                 break
-    else:
-        text = (
-            "🍽 <b>Сейчас ты не голодаешь.</b>\n\n"
-            "Нажми /fast, чтобы начать отсчёт."
-        )
 
-    await update.message.reply_text(text, parse_mode="HTML")
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🍽 Поел /eat", callback_data="cmd_eat"),
+             InlineKeyboardButton("🗑 Отменить", callback_data="cmd_cancel")]
+        ])
+    else:
+        text = "🍽 <b>Сейчас ты не голодаешь.</b>\n\nНажми /fast, чтобы начать отсчёт."
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🕐 Начать фаст", callback_data="cmd_fast")]
+        ])
+
+    await _reply(update, text, keyboard)
+
+
+async def _reply(update: Update, text: str, keyboard=None):
+    if update.callback_query:
+        try:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
+        except Exception:
+            pass
+    else:
+        await update.message.reply_text(text, parse_mode="HTML", reply_markup=keyboard)
