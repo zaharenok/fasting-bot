@@ -1,0 +1,14 @@
+[Unit]
+Description=Fasting Bot — Telegram Bot Polling
+After=network.target
+
+[Service]
+Type=simple
+User=oleg
+WorkingDirectory=/home/oleg/projects/fasting-bot
+ExecStart=/home/oleg/projects/fasting-bot/.venv/bin/python -m bot.main
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

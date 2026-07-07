@@ -1,0 +1,14 @@
+[Unit]
+Description=Fasting Bot — Web Dashboard (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=oleg
+WorkingDirectory=/home/oleg/projects/fasting-bot
+ExecStart=/home/oleg/projects/fasting-bot/.venv/bin/uvicorn web.main:app --host 0.0.0.0 --port 8791
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

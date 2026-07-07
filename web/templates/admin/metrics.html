@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Админ — Метрики{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+{% endblock %}
+{% block content %}
+
+<h1 class="text-2xl font-bold mb-6 text-amber-400">📈 Метрики</h1>
+
+<div class="bg-dark-800 border border-gray-800 rounded-2xl p-5 mb-6">
+    <h2 class="text-lg font-semibold mb-4">Регистрации пользователей</h2>
+    <canvas id="usersChart" height="150"></canvas>
+</div>
+
+<script>
+// Aggregate user registrations by date
+const users = {{ users | tojson | safe }};
+const dailyCounts = {};
+users.forEach(u => {
+    if (u.created_at) {
+        const day = u.created_at.slice(0, 10);
+        dailyCounts[day] = (dailyCounts[day] || 0) + 1;
+    }
+});
+const sortedDays = Object.keys(dailyCounts).sort();
+const totalSoFar = [];
+let running = 0;
+sortedDays.forEach(d => {
+    running += dailyCounts[d];
+    totalSoFar.push(running);
+});
+
+new Chart(document.getElementById('usersChart'), {
+    type: 'line',
+    data: {
+        labels: sortedDays,
+        datasets: [{
+            label: 'Всего пользователей',
+            data: totalSoFar,
+            borderColor: '#34d399',
+            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#9ca3af' } } },
+        scales: {
+            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af' } },
+            x: { grid: { display: false }, ticks: { color: '#9ca3af', maxTicksLimit: 15 } }
+        }
+    }
+});
+</script>
+
+{% endblock %}

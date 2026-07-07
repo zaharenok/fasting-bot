@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Админ — Обзор{% endblock %}
+{% block content %}
+
+<h1 class="text-2xl font-bold mb-6 text-amber-400">⚙️ Admin Dashboard</h1>
+
+<!-- Stats overview -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Пользователи</p>
+        <p class="text-2xl font-bold mt-1">{{ stats.total_users }}</p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Активны сегодня</p>
+        <p class="text-2xl font-bold mt-1 text-emerald-400">{{ stats.active_today }}</p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Фастов сегодня</p>
+        <p class="text-2xl font-bold mt-1 text-blue-400">{{ stats.fasts_today }}</p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Премиум</p>
+        <p class="text-2xl font-bold mt-1 text-amber-400">{{ stats.premium_users }}</p>
+    </div>
+</div>
+
+<!-- Users table -->
+<div class="bg-dark-800 border border-gray-800 rounded-2xl overflow-hidden">
+    <div class="flex justify-between items-center px-5 py-4 border-b border-gray-700">
+        <h2 class="text-lg font-semibold">Все пользователи ({{ users | length }})</h2>
+        <a href="/admin/users" class="text-emerald-500 text-sm hover:underline">Подробнее →</a>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-dark-700 border-b border-gray-700 text-gray-400">
+                    <th class="text-left px-4 py-3">ID</th>
+                    <th class="text-left px-4 py-3">Username</th>
+                    <th class="text-left px-4 py-3">Имя</th>
+                    <th class="text-left px-4 py-3">Регистрация</th>
+                    <th class="text-center px-4 py-3">Премиум</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users[:20] %}
+                <tr class="border-b border-gray-800 hover:bg-dark-700/50">
+                    <td class="px-4 py-3 text-gray-400 font-mono text-xs">{{ u.telegram_id }}</td>
+                    <td class="px-4 py-3">{{ u.username or '—' }}</td>
+                    <td class="px-4 py-3">{{ u.first_name or '—' }}</td>
+                    <td class="px-4 py-3 text-gray-400">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+                    <td class="px-4 py-3 text-center">
+                        {% if u.is_premium %}
+                        <span class="text-amber-400">⭐</span>
+                        {% else %}
+                        <span class="text-gray-600">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-4 flex gap-3">
+    <a href="/admin/users" class="bg-dark-800 border border-gray-700 rounded-lg px-4 py-2 text-sm hover:bg-dark-700">👥 Все пользователи</a>
+    <a href="/admin/metrics" class="bg-dark-800 border border-gray-700 rounded-lg px-4 py-2 text-sm hover:bg-dark-700">📈 Метрики</a>
+</div>
+
+{% endblock %}

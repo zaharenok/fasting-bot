@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}История — Fasting Bot{% endblock %}
+{% block content %}
+
+<h1 class="text-2xl font-bold mb-6">📋 История фастов</h1>
+
+{% if fasts %}
+<div class="bg-dark-800 border border-gray-800 rounded-2xl overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="bg-dark-700 border-b border-gray-700 text-gray-400">
+                <th class="text-left px-4 py-3">Дата</th>
+                <th class="text-left px-4 py-3">Начало</th>
+                <th class="text-left px-4 py-3">Конец</th>
+                <th class="text-right px-4 py-3">Длительность</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in fasts %}
+            <tr class="border-b border-gray-800 hover:bg-dark-700/50">
+                <td class="px-4 py-3">{{ f.ended_at[:10] }}</td>
+                <td class="px-4 py-3 text-gray-400">{{ f.started_at[11:16] }}</td>
+                <td class="px-4 py-3 text-gray-400">{{ f.ended_at[11:16] }}</td>
+                <td class="px-4 py-3 text-right font-mono text-emerald-400">
+                    {% set m = f.duration_minutes %}
+                    {% if m >= 1440 %}
+                        {{ (m // 1440) }}д {{ ((m % 1440) // 60) }}ч
+                    {% elif m >= 60 %}
+                        {{ (m // 60) }}ч {{ (m % 60) }}м
+                    {% else %}
+                        {{ m }}м
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="bg-dark-800 border border-gray-800 rounded-2xl p-8 text-center">
+    <p class="text-gray-500">Пока нет завершённых фастов</p>
+    <p class="text-gray-600 text-sm mt-2">Нажми /fast → /eat в боте</p>
+</div>
+{% endif %}
+
+{% endblock %}

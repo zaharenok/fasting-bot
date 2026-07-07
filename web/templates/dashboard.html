@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Дашборд — Fasting Bot{% endblock %}
+{% block content %}
+
+{% if active %}
+<!-- Active Fast Timer -->
+<div class="bg-gradient-to-br from-emerald-900/40 to-dark-800 border border-emerald-800/50 rounded-2xl p-6 mb-6 text-center">
+    <p class="text-gray-400 text-sm mb-1">Без еды уже</p>
+    <div class="timer-font text-5xl md:text-6xl font-bold text-emerald-400 pulse-slow" id="timer">0ч 0м</div>
+    <p class="text-gray-500 text-xs mt-2">с {{ active.started_at[:16] | replace('T', ' ') }}</p>
+</div>
+{% else %}
+<!-- No active fast -->
+<div class="bg-gradient-to-br from-amber-900/30 to-dark-800 border border-amber-800/40 rounded-2xl p-6 mb-6 text-center">
+    <p class="text-gray-400 text-sm">Сейчас ты не голодаешь</p>
+    <p class="text-gray-500 text-xs mt-2">Нажми /fast в боте, чтобы начать</p>
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Всего фастов</p>
+        <p class="text-2xl font-bold mt-1">{{ stats.total_fasts or 0 }}</p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Рекорд</p>
+        <p class="text-2xl font-bold mt-1">
+            {% if stats.longest_duration_minutes %}
+                {{ (stats.longest_duration_minutes // 60) }}ч
+            {% else %}0ч{% endif %}
+        </p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Средний</p>
+        <p class="text-2xl font-bold mt-1">
+            {% if stats.avg_duration_minutes %}
+                {{ (stats.avg_duration_minutes | int // 60) }}ч
+            {% else %}0ч{% endif %}
+        </p>
+    </div>
+    <div class="bg-dark-800 border border-gray-800 rounded-xl p-4">
+        <p class="text-gray-500 text-xs uppercase">Всего часов</p>
+        <p class="text-2xl font-bold mt-1">
+            {% if stats.total_duration_minutes %}
+                {{ (stats.total_duration_minutes | int // 60) }}ч
+            {% else %}0ч{% endif %}
+        </p>
+    </div>
+</div>
+
+<!-- Recent Fasts -->
+<div class="bg-dark-800 border border-gray-800 rounded-2xl p-5">
+    <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-semibold">Последние фасты</h2>
+        <a href="/history" class="text-emerald-500 text-sm hover:underline">Все →</a>
+    </div>
+
+    {% if recent %}
+    <div class="space-y-2">
+        {% for f in recent %}
+        <div class="flex justify-between items-center py-2 border-b border-gray-800 last:border-0">
+            <span class="text-gray-400 text-sm">{{ f.ended_at[:10] }}</span>
+            <span class="font-mono text-emerald-400">
+                {% set m = f.duration_minutes %}
+                {% if m >= 1440 %}
+                    {{ (m // 1440) }}д {{ ((m % 1440) // 60) }}ч
+                {% elif m >= 60 %}
+                    {{ (m // 60) }}ч {{ (m % 60) }}м
+                {% else %}
+                    {{ m }}м
+                {% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-gray-500 text-sm">Пока нет завершённых фастов</p>
+    {% endif %}
+</div>
+
+<script>
+    // Live timer
+    {% if active %}
+    const startTime = new Date("{{ active.started_at }}").getTime();
+    const timerEl = document.getElementById('timer');
+
+    function updateTimer() {
+        const now = Date.now();
+        const diff = Math.floor((now - startTime) / 1000);
+        const days = Math.floor(diff / 86400);
+        const hours = Math.floor((diff % 86400) / 3600);
+        const minutes = Math.floor((diff % 3600) / 60);
+
+        let text = '';
+        if (days > 0) text += days + 'д ';
+        text += hours + 'ч ' + minutes + 'м';
+        timerEl.textContent = text;
+    }
+
+    updateTimer();
+    setInterval(updateTimer, 10000); // update every 10s
+    {% endif %}
+</script>
+
+{% endblock %}
