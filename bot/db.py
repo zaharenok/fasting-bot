@@ -55,6 +55,19 @@ def _init_db(conn: sqlite3.Connection):
             used_at TEXT
         );
     """)
+
+    # Migration: add columns that may not exist yet
+    migs = [
+        "ALTER TABLE users ADD COLUMN goal_minutes INTEGER",
+        "ALTER TABLE users ADD COLUMN morning_reminder TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN goal_reminder_minutes INTEGER DEFAULT 30",
+    ]
+    for sql in migs:
+        try:
+            conn.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
     conn.commit()
 
 
@@ -84,6 +97,108 @@ def get_user(telegram_id: int) -> Optional[dict]:
     cur = conn.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
     row = cur.fetchone()
     return dict(row) if row else None
+
+
+# ─── Goals & Reminders ───────────────────────────────────────
+
+def get_goal(telegram_id: int) -> Optional[int]:
+    """Get goal duration in minutes, or None if not set."""
+    conn = _get_conn()
+    cur = conn.execute("SELECT goal_minutes FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cur.fetchone()
+    if row and row["goal_minutes"]:
+        return row["goal_minutes"]
+    return None
+
+
+def set_goal(telegram_id: int, minutes: Optional[int]):
+    """Set fasting goal in minutes. Pass None or 0 to disable."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE users SET goal_minutes = ? WHERE telegram_id = ?",
+        (minutes, telegram_id),
+    )
+    conn.commit()
+
+
+def get_morning_reminder(telegram_id: int) -> Optional[str]:
+    """Get morning reminder time (HH:MM) or None."""
+    conn = _get_conn()
+    cur = conn.execute("SELECT morning_reminder FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cur.fetchone()
+    val = row["morning_reminder"] if row else ""
+    return val if val else None
+
+
+def set_morning_reminder(telegram_id: int, time_str: Optional[str]):
+    """Set morning reminder time. HH:MM format or None/empty to disable."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE users SET morning_reminder = ? WHERE telegram_id = ?",
+        (time_str or "", telegram_id),
+    )
+    conn.commit()
+
+
+def get_goal_reminder_minutes(telegram_id: int) -> int:
+    """Get how many minutes before goal to remind (default 30)."""
+    conn = _get_conn()
+    cur = conn.execute("SELECT goal_reminder_minutes FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cur.fetchone()
+    return row["goal_reminder_minutes"] if row else 30
+
+
+def set_goal_reminder_minutes(telegram_id: int, minutes: int):
+    """Set how many minutes before goal to send reminder."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE users SET goal_reminder_minutes = ? WHERE telegram_id = ?",
+        (minutes, telegram_id),
+    )
+    conn.commit()
+
+
+def get_reminder_info(telegram_id: int) -> dict:
+    """Get all reminder/goal settings for display."""
+    conn = _get_conn()
+    cur = conn.execute(
+        "SELECT goal_minutes, morning_reminder, goal_reminder_minutes FROM users WHERE telegram_id = ?",
+        (telegram_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return {"goal": None, "morning": None, "goal_reminder": 30}
+    return {
+        "goal": row["goal_minutes"],
+        "morning": row["morning_reminder"] if row["morning_reminder"] else None,
+        "goal_reminder": row["goal_reminder_minutes"],
+    }
+
+
+# ─── Scheduler helpers ───────────────────────────────────────
+
+def get_active_users_with_goals() -> list[dict]:
+    """Get all users with active fast + goal set (for scheduler)."""
+    conn = _get_conn()
+    cur = conn.execute("""
+        SELECT u.telegram_id, u.goal_minutes, u.goal_reminder_minutes,
+               f.started_at, f.id as fast_id
+        FROM users u
+        JOIN fasts f ON f.user_id = u.telegram_id AND f.ended_at IS NULL
+        WHERE u.goal_minutes IS NOT NULL AND u.goal_minutes > 0
+    """)
+    return [dict(r) for r in cur.fetchall()]
+
+
+def get_users_with_morning_reminder() -> list[dict]:
+    """Get all users with morning reminder enabled."""
+    conn = _get_conn()
+    cur = conn.execute("""
+        SELECT telegram_id, morning_reminder
+        FROM users
+        WHERE morning_reminder IS NOT NULL AND morning_reminder != ''
+    """)
+    return [dict(r) for r in cur.fetchall()]
 
 
 # ─── Fasts ───────────────────────────────────────────────────
@@ -171,7 +286,6 @@ def get_stats(telegram_id: int) -> dict:
     )
     row = cur.fetchone()
 
-    # Current fasting?
     active = get_active_fast(telegram_id)
     current_min = 0
     if active:
@@ -216,7 +330,6 @@ def use_dashboard_token(token: str) -> Optional[dict]:
     if utcnow() > expires:
         return None
 
-    # Mark used
     conn.execute("UPDATE dashboard_tokens SET used_at = ? WHERE token = ?", (utcnow().isoformat(), token))
     conn.commit()
 

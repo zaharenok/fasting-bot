@@ -26,14 +26,18 @@ from bot.handlers.fast import (
     show_selector,
     show_more,
     handle_fast_set,
-    handle_custom_time,
+    handle_custom_time as fast_handle_custom,
 )
 from bot.handlers.status import cmd_status
 from bot.handlers.stats import cmd_stats
 from bot.handlers.history import cmd_history
 from bot.handlers.dashboard import cmd_dashboard
-from bot.db import get_active_fast, start_fast
+from bot.handlers.goal import cmd_goal, handle_goal_set, handle_goal_off
+from bot.handlers.reminders import cmd_reminder, handle_reminder_callback, handle_reminder_time_input
+from bot.scheduler import scheduler_tick
+from bot.db import get_active_fast, start_fast, get_user
 from bot.handlers.fast import _parse_time, _action_keyboard
+from bot.utils import format_duration
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -55,10 +59,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "cmd_stats": cmd_stats,
         "cmd_dashboard": cmd_dashboard,
         "cmd_history": cmd_history,
+        "cmd_goal": cmd_goal,
+        "cmd_reminder": cmd_reminder,
         "fast_selector": show_selector,
         "fast_more": show_more,
         "fast_back": show_selector,
-        "fast_custom": handle_custom_time,
+        "fast_custom": fast_handle_custom,
     }
 
     handler = cmd_map.get(query.data)
@@ -66,57 +72,80 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handler(update, context)
 
 
-async def custom_time_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle free-text time input (after tapping 'Своё время' or typing raw time)."""
+async def combined_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle all non-command text: reminder settings OR fast time input."""
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # Only respond if looks like a time input
+    # ── First try: parse as reminder setting ───────────────
+    # HH:MM → morning reminder setting
+    if re.match(r'^\d{1,2}:\d{2}$', text):
+        h, m = map(int, text.split(":"))
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            from bot.db import set_morning_reminder
+            set_morning_reminder(user_id, f"{h:02d}:{m:02d}")
+            await update.message.reply_text(
+                f"⏰ <b>Утреннее напоминание установлено</b> на {h:02d}:{m:02d} 🕐",
+                parse_mode="HTML",
+            )
+            return
+
+    # Plain number 5-120 → goal reminder interval setting
+    try:
+        mins = int(text)
+        if 5 <= mins <= 120:
+            from bot.db import set_goal_reminder_minutes
+            set_goal_reminder_minutes(user_id, mins)
+            await update.message.reply_text(
+                f"⏰ <b>Напоминание о цели:</b> за {mins} мин до цели.",
+                parse_mode="HTML",
+            )
+            return
+    except ValueError:
+        pass
+
+    # ── Second try: parse as fast start time ──────────────
     time_patterns = [
         r'^\d{1,2}:\d{2}',                          # 14:30
         r'^\d{1,2}:\d{2}\s+вчера',                   # 14:30 вчера
         r'^\d+\s*(ч|час|часа|часов|h|м|мин|минут)',  # 2 часа, 30 минут
-        r'^\d{4}-\d{2}-\d{2}'
+        r'^\d{4}-\d{2}-\d{2}',
     ]
-    if not any(re.match(p, text.lower()) for p in time_patterns):
-        return  # not a time input, ignore
+    if any(re.match(p, text.lower()) for p in time_patterns):
+        parsed = _parse_time(text)
+        if not parsed:
+            await update.message.reply_text(
+                "❌ <b>Не понял время.</b>\n\n"
+                "Попробуй:\n"
+                "<code>14:30</code> — сегодня\n"
+                "<code>2 часа назад</code>\n"
+                "<code>вчера 18:00</code>",
+                parse_mode="HTML",
+            )
+            return
 
-    parsed = _parse_time(text)
-    if not parsed:
-        await update.message.reply_text(
-            "❌ <b>Не понял время.</b>\n\n"
-            "Попробуй:\n"
-            "<code>14:30</code> — сегодня\n"
-            "<code>2 часа назад</code>\n"
-            "<code>вчера 18:00</code>",
-            parse_mode="HTML",
+        active = get_active_fast(user_id)
+        if active:
+            await update.message.reply_text(
+                "⚠️ <b>Ты уже голодаешь!</b>\n"
+                "Сначала заверши /eat или отмени /cancel.",
+                parse_mode="HTML",
+            )
+            return
+
+        record = start_fast(user_id, started_at=parsed)
+        from datetime import datetime as dt2, timezone as tz2
+        started = dt2.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+        now = dt2.now(tz2.utc)
+        dur = int((now - started).total_seconds() / 60)
+
+        reply = (
+            "🕐 <b>Голодание начато!</b>\n\n"
+            f"Последний приём пищи: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+            f"⏳ <b>Ты уже {format_duration(dur)} без еды</b>\n\n"
+            "Нажми /eat когда поешь."
         )
-        return
-
-    # Check for active fast
-    active = get_active_fast(user_id)
-    if active:
-        await update.message.reply_text(
-            "⚠️ <b>Ты уже голодаешь!</b>\n"
-            "Сначала заверши /eat или отмени /cancel.",
-            parse_mode="HTML",
-        )
-        return
-
-    record = start_fast(user_id, started_at=parsed)
-    from datetime import datetime as dt2, timezone as tz2
-    started = dt2.fromisoformat(record["started_at"].replace("Z", "+00:00"))
-    now = dt2.now(tz2.utc)
-    dur = int((now - started).total_seconds() / 60)
-
-    from bot.utils import format_duration
-    reply = (
-        "🕐 <b>Голодание начато!</b>\n\n"
-        f"Последний приём пищи: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
-        f"⏳ <b>Ты уже {format_duration(dur)} без еды</b>\n\n"
-        "Нажми /eat когда поешь."
-    )
-    await update.message.reply_text(reply, parse_mode="HTML", reply_markup=_action_keyboard())
+        await update.message.reply_text(reply, parse_mode="HTML", reply_markup=_action_keyboard())
 
 
 def main():
@@ -136,17 +165,29 @@ def main():
     app.add_handler(CommandHandler("history", cmd_history))
     app.add_handler(CommandHandler("dashboard", cmd_dashboard))
     app.add_handler(CommandHandler("cancel", cmd_cancel))
+    app.add_handler(CommandHandler("goal", cmd_goal))
+    app.add_handler(CommandHandler("reminder", cmd_reminder))
 
     # Fast time presets (fast_set:N)
     app.add_handler(CallbackQueryHandler(handle_fast_set, pattern=r"^fast_set:\d+$"))
 
+    # Goal callbacks
+    app.add_handler(CallbackQueryHandler(handle_goal_set, pattern=r"^goal_set:\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_goal_off, pattern=r"^goal_off$"))
+
+    # Reminder callbacks
+    app.add_handler(CallbackQueryHandler(handle_reminder_callback, pattern=r"^rem_"))
+
     # Other inline buttons
     app.add_handler(CallbackQueryHandler(button_callback))
 
-    # Free-text time input (e.g. "14:30", "2 часа назад")
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, custom_time_text))
+    # Non-command text: reminder settings + fast time input
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, combined_text_handler))
 
-    logger.info("Bot started polling...")
+    # ── Scheduler: check every 60 seconds ─────────────
+    app.job_queue.run_repeating(scheduler_tick, interval=60, first=30)
+
+    logger.info("Bot started polling with scheduler...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
