@@ -1,0 +1,14 @@
+services:
+  fasting-bot:
+    build: .
+    container_name: fasting-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - DB_PATH=/data/fasting.db
+      - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID:-52784970}
+    volumes:
+      - fasting-data:/data
+
+volumes:
+  fasting-data:
