@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fasting Bot</title>
+    <script src="https://telegram.org/js/telegram-webapp.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { 900: '#0a0a0f', 800: '#141422', 700: '#1a1a2e', 600: '#1e293b' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 16px;
+            padding-bottom: 100px;
+        }
+        .card {
+            background: #141422;
+            border: 1px solid #1e293b;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 12px;
+        }
+        .timer-text {
+            font-size: 48px;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -1px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #059669, #10b981);
+            border: none;
+            border-radius: 12px;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            width: 100%;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .btn-primary:active { transform: scale(0.97); }
+        .btn-secondary {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #e2e8f0;
+            width: 100%;
+            cursor: pointer;
+        }
+        .btn-secondary:active { background: #334155; }
+        .mood-btn {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            border: 2px solid #1e293b;
+            background: #141422;
+            font-size: 22px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .mood-btn.selected { border-color: #10b981; background: #064e3b; transform: scale(1.1); }
+        .mood-btn:active { transform: scale(0.9); }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 10px rgba(16, 185, 129, 0.2); }
+            50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.5); }
+        }
+        .active-timer { animation: pulse-glow 3s ease-in-out infinite; }
+        .hidden { display: none !important; }
+        .slide-up {
+            animation: slideUp 0.3s ease-out;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .tab { padding: 8px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+        .tab.active { background: #10b981; color: white; }
+        .tab:not(.active) { color: #64748b; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h1 style="font-size:20px; font-weight:700;">🕐 Fasting</h1>
+            <span id="userGreeting" style="font-size:13px; color:#64748b;"></span>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <div class="tab active" onclick="switchTab('timer')" id="tabTimer">⏱ Фаст</div>
+            <div class="tab" onclick="switchTab('mood')" id="tabMood">📝 Чекин</div>
+            <div class="tab" onclick="switchTab('stats')" id="tabStats">📊 Статистика</div>
+        </div>
+
+        <!-- Tab: Timer -->
+        <div id="tabTimerContent">
+            <div class="card active-timer" style="text-align:center; padding:32px 20px;">
+                <div style="color:#64748b; font-size:14px; margin-bottom:8px;" id="fastLabel">Загрузка...</div>
+                <div class="timer-text" style="color:#34d399;" id="timerDisplay">--:--:--</div>
+                <div style="color:#475569; font-size:12px; margin-top:8px;" id="fastStarted"></div>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:12px;" id="fastActions">
+                <button class="btn-primary" onclick="startFast()" id="btnStartFast">🕐 Начать голодание</button>
+                <button class="btn-secondary" onclick="stopFast()" id="btnStopFast" style="display:none;">🍽 Поел /eat</button>
+                <button class="btn-secondary" onclick="cancelFast()" id="btnCancelFast" style="display:none;">🗑 Отменить</button>
+            </div>
+
+            <!-- Goal -->
+            <div class="card" id="goalCard">
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="font-size:14px; font-weight:600;">🎯 Цель</span>
+                    <span id="goalLabel" style="font-size:13px; color:#64748b;">не задана</span>
+                </div>
+                <div style="height:6px; background:#1e293b; border-radius:3px; overflow:hidden;">
+                    <div id="goalProgress" style="height:100%; width:0%; background:linear-gradient(90deg,#059669,#34d399); border-radius:3px; transition:width 1s;"></div>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:#475569; margin-top:4px;">
+                    <span id="goalCurrent">0ч</span>
+                    <span id="goalTarget">-</span>
+                </div>
+            </div>
+
+            <!-- Quick stats -->
+            <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px;">
+                <div class="card" style="text-align:center; padding:12px;">
+                    <div style="color:#64748b; font-size:11px;">Всего</div>
+                    <div id="statTotal" style="font-size:20px; font-weight:700;">0</div>
+                </div>
+                <div class="card" style="text-align:center; padding:12px;">
+                    <div style="color:#64748b; font-size:11px;">Рекорд</div>
+                    <div id="statBest" style="font-size:20px; font-weight:700;">0ч</div>
+                </div>
+                <div class="card" style="text-align:center; padding:12px;">
+                    <div style="color:#64748b; font-size:11px;">Средний</div>
+                    <div id="statAvg" style="font-size:20px; font-weight:700;">0ч</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Mood Checkin -->
+        <div id="tabMoodContent" class="hidden">
+            <div class="card" id="moodCard">
+                <div style="font-size:16px; font-weight:600; margin-bottom:4px;">Как настроение?</div>
+                <div style="color:#64748b; font-size:13px; margin-bottom:16px;" id="moodFastDuration">---</div>
+
+                <div style="display:flex; gap:12px; justify-content:center; margin-bottom:20px;" id="moodButtons">
+                    <button class="mood-btn" onclick="selectMood('отлично')" title="Отлично">🔥</button>
+                    <button class="mood-btn" onclick="selectMood('хорошо')" title="Хорошо">💪</button>
+                    <button class="mood-btn" onclick="selectMood('нормально')" title="Нормально">🙂</button>
+                    <button class="mood-btn" onclick="selectMood('устал')" title="Устал">😴</button>
+                    <button class="mood-btn" onclick="selectMood('голоден')" title="Голоден">🤤</button>
+                    <button class="mood-btn" onclick="selectMood('слабость')" title="Слабость">😵</button>
+                </div>
+
+                <div id="moodAdvice" style="background:#1a1a2e; border-radius:12px; padding:12px; margin-bottom:12px; font-size:13px; color:#94a3b8; display:none;"></div>
+
+                <div style="margin-top:12px;" id="energySection" style="display:none;">
+                    <div style="font-size:13px; color:#64748b; margin-bottom:8px;">Энергия:</div>
+                    <div style="display:flex; gap:8px; justify-content:center;">
+                        <button class="mood-btn" onclick="selectEnergy(1)" style="font-size:14px;" title="1">🪫</button>
+                        <button class="mood-btn" onclick="selectEnergy(2)" style="font-size:14px;" title="2">🔋</button>
+                        <button class="mood-btn" onclick="selectEnergy(3)" style="font-size:14px;" title="3">⚡</button>
+                        <button class="mood-btn" onclick="selectEnergy(4)" style="font-size:14px;" title="4">🔥</button>
+                        <button class="mood-btn" onclick="selectEnergy(5)" style="font-size:14px;" title="5">💫</button>
+                    </div>
+                </div>
+
+                <div id="moodResult" style="display:none; color:#34d399; font-size:14px; margin-top:8px;"></div>
+            </div>
+        </div>
+
+        <!-- Tab: Stats -->
+        <div id="tabStatsContent" class="hidden">
+            <div class="card" style="text-align:center;">
+                <canvas id="chartCanvas" height="180"></canvas>
+            </div>
+
+            <div class="card">
+                <div style="font-size:14px; font-weight:600; margin-bottom:12px;">📋 Последние фасты</div>
+                <div id="recentFastsList">
+                    <div style="color:#475569; font-size:13px;">Загрузка...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script>
+        const TG = window.Telegram?.WebApp;
+        let userId = null;
+        let activeFast = null;
+        let timerInterval = null;
+        let myChart = null;
+        let currentFeeling = null;
+
+        // ── Init ───────────────────────────────────────────
+        (function init() {
+            if (TG) {
+                TG.expand();
+                TG.ready();
+                TG.enableClosingConfirmation();
+
+                const data = TG.initDataUnsafe;
+                userId = data?.user?.id;
+                document.getElementById('userGreeting').textContent = data?.user?.first_name || '';
+            }
+
+            if (!userId) {
+                // Fallback: try to get from URL param
+                const params = new URLSearchParams(window.location.search);
+                userId = params.get('user_id');
+            }
+
+            if (userId) {
+                loadData();
+                setInterval(loadData, 30000); // refresh every 30s
+            }
+
+            // Start timer tick
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+        })();
+
+        // ── Tab switching ──────────────────────────────────
+        function switchTab(tab) {
+            ['timer','mood','stats'].forEach(t => {
+                document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('active', t === tab);
+                document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}Content`).classList.toggle('hidden', t !== tab);
+            });
+            if (tab === 'stats' && typeof Chart !== 'undefined') loadChart();
+            if (tab === 'mood') updateMoodDuration();
+        }
+
+        // ── Load data from API ─────────────────────────────
+        async function loadData() {
+            try {
+                const r = await fetch(`/api/mini/${userId}`);
+                const data = await r.json();
+                updateUI(data);
+            } catch(e) {}
+        }
+
+        // ── Update UI ──────────────────────────────────────
+        function updateUI(data) {
+            activeFast = data.active_fast || null;
+
+            // Timer
+            if (activeFast) {
+                document.getElementById('fastLabel').textContent = '⏳ Ты без еды уже';
+                document.getElementById('fastStarted').textContent = `с ${activeFast.started_at.slice(11,16)} ${activeFast.started_at.slice(8,10)}.${activeFast.started_at.slice(5,7)}`;
+                document.getElementById('btnStartFast').style.display = 'none';
+                document.getElementById('btnStopFast').style.display = 'block';
+                document.getElementById('btnCancelFast').style.display = 'block';
+            } else {
+                document.getElementById('fastLabel').textContent = '🍽 Сейчас не голодаешь';
+                document.getElementById('timerDisplay').textContent = '00:00:00';
+                document.getElementById('fastStarted').textContent = '';
+                document.getElementById('btnStartFast').style.display = 'block';
+                document.getElementById('btnStopFast').style.display = 'none';
+                document.getElementById('btnCancelFast').style.display = 'none';
+            }
+
+            // Stats
+            const s = data.stats || {};
+            document.getElementById('statTotal').textContent = s.total_fasts || 0;
+            const best = s.longest_duration_minutes || 0;
+            const avg = s.avg_duration_minutes || 0;
+            document.getElementById('statBest').textContent = best >= 60 ? Math.floor(best/60)+'ч' : best+'м';
+            document.getElementById('statAvg').textContent = avg >= 60 ? Math.floor(avg)+'ч' : Math.floor(avg)+'м';
+
+            // Goal
+            const g = data.goal_minutes;
+            if (g && activeFast) {
+                document.getElementById('goalLabel').textContent = g >= 60 ? Math.floor(g/60)+'ч' : g+'м';
+                const started = new Date(activeFast.started_at).getTime();
+                const now = Date.now();
+                const currentMin = (now - started) / 60000;
+                const pct = Math.min((currentMin / g) * 100, 100);
+                document.getElementById('goalProgress').style.width = pct + '%';
+                document.getElementById('goalCurrent').textContent = Math.floor(currentMin/60)+'ч';
+                document.getElementById('goalTarget').textContent = g >= 60 ? Math.floor(g/60)+'ч' : g+'м';
+            } else {
+                document.getElementById('goalProgress').style.width = '0%';
+                document.getElementById('goalLabel').textContent = g ? Math.floor(g/60)+'ч' : 'не задана';
+                document.getElementById('goalCurrent').textContent = '0ч';
+                document.getElementById('goalTarget').textContent = g ? Math.floor(g/60)+'ч' : '-';
+            }
+
+            // Recent fasts
+            const recent = data.recent || [];
+            const list = document.getElementById('recentFastsList');
+            if (recent.length) {
+                list.innerHTML = recent.slice(0,10).map(f => {
+                    const m = f.duration_minutes || 0;
+                    const dur = m >= 1440 ? Math.floor(m/1440)+'д ' : (m >= 60 ? Math.floor(m/60)+'ч '+m%60+'м' : m+'м');
+                    return `<div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #1e293b; font-size:13px;">
+                        <span style="color:#64748b;">${(f.ended_at||'').slice(5,10)}</span>
+                        <span style="color:#34d399;">${dur}</span>
+                    </div>`;
+                }).join('');
+            } else {
+                list.innerHTML = '<div style="color:#475569; font-size:13px;">Пока нет фастов</div>';
+            }
+
+            updateTimerDisplay();
+        }
+
+        // ── Timer tick ─────────────────────────────────────
+        function updateTimerDisplay() {
+            if (!activeFast) return;
+            const started = new Date(activeFast.started_at).getTime();
+            const now = Date.now();
+            const diff = Math.floor((now - started) / 1000);
+            const h = Math.floor(diff / 3600);
+            const m = Math.floor((diff % 3600) / 60);
+            const s = diff % 60;
+            document.getElementById('timerDisplay').textContent =
+                `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
+
+        // ── Actions ────────────────────────────────────────
+        async function startFast() {
+            try {
+                await fetch(`/api/mini/${userId}/start`, { method: 'POST' });
+                await loadData();
+            } catch(e) {}
+        }
+
+        async function stopFast() {
+            try {
+                await fetch(`/api/mini/${userId}/stop`, { method: 'POST' });
+                activeFast = null;
+                await loadData();
+            } catch(e) {}
+        }
+
+        async function cancelFast() {
+            try {
+                await fetch(`/api/mini/${userId}/cancel`, { method: 'POST' });
+                activeFast = null;
+                await loadData();
+            } catch(e) {}
+        }
+
+        // ── Mood ───────────────────────────────────────────
+        function updateMoodDuration() {
+            if (activeFast) {
+                const started = new Date(activeFast.started_at).getTime();
+                const diff = Math.floor((Date.now() - started) / 60000);
+                document.getElementById('moodFastDuration').textContent =
+                    `⏳ Голодаешь ${Math.floor(diff/60)}ч ${diff%60}м`;
+            } else {
+                document.getElementById('moodFastDuration').textContent = 'Сейчас не голодаешь';
+            }
+        }
+
+        const FEEL_ADVICE = {
+            'отлично': '🔥 Кетоны дают энергию! Организм адаптируется.',
+            'хорошо': '💪 Стабильное состояние — признак жиросжигания.',
+            'нормально': '🙂 Всё по плану.',
+            'устал': '😴 Нормально. Прогуляйся или выпей воды с солью.',
+            'голоден': '🤤 Голод волнами — пройдёт через 15-20 мин. Выпей воды!',
+            'слабость': '😵 Возможно не хватает электролитов. Добавь соль в воду.',
+        };
+
+        function selectMood(feeling) {
+            document.querySelectorAll('#moodButtons .mood-btn').forEach(b => b.classList.remove('selected'));
+            event.target.classList.add('selected');
+            currentFeeling = feeling;
+
+            const advice = FEEL_ADVICE[feeling] || '';
+            const el = document.getElementById('moodAdvice');
+            el.textContent = advice;
+            el.style.display = 'block';
+            document.getElementById('energySection').style.display = 'block';
+        }
+
+        async function selectEnergy(level) {
+            if (!currentFeeling) return;
+            try {
+                await fetch(`/api/mini/${userId}/checkin`, {
+                    method: 'POST',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({feeling: currentFeeling, energy: level})
+                });
+                document.getElementById('moodResult').textContent = '✅ Сохранено!';
+                document.getElementById('moodResult').style.display = 'block';
+                document.getElementById('moodAdvice').style.display = 'none';
+                document.getElementById('energySection').style.display = 'none';
+                document.querySelectorAll('#moodButtons .mood-btn').forEach(b => b.classList.remove('selected'));
+                setTimeout(() => document.getElementById('moodResult').style.display = 'none', 2000);
+            } catch(e) {}
+        }
+
+        // ── Chart ───────────────────────────────────────────
+        async function loadChart() {
+            try {
+                const r = await fetch(`/api/mini/${userId}/history`);
+                const data = await r.json();
+                const fasts = data.fasts || [];
+
+                if (myChart) myChart.destroy();
+
+                const ctx = document.getElementById('chartCanvas').getContext('2d');
+                const chartData = fasts.slice(0, 14).reverse();
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: chartData.map(f => (f.ended_at||'').slice(5,10)),
+                        datasets: [{
+                            label: 'Часы',
+                            data: chartData.map(f => ((f.duration_minutes||0)/60).toFixed(1)),
+                            backgroundColor: 'rgba(52,211,153,0.4)',
+                            borderColor: 'rgba(52,211,153,0.8)',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color:'#64748b' } },
+                            x: { grid: { display: false }, ticks: { color:'#64748b', maxRotation: 45 } }
+                        }
+                    }
+                });
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>

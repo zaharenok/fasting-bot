@@ -32,6 +32,7 @@ from bot.handlers.status import cmd_status
 from bot.handlers.stats import cmd_stats
 from bot.handlers.history import cmd_history
 from bot.handlers.dashboard import cmd_dashboard
+from bot.handlers.miniapp import cmd_miniapp
 from bot.handlers.goal import cmd_goal, handle_goal_set, handle_goal_off
 from bot.handlers.reminders import cmd_reminder, handle_reminder_callback, handle_reminder_time_input
 from bot.handlers.checkin import cmd_checkin, handle_feeling, handle_energy, feel_stats
@@ -172,6 +173,7 @@ def main():
     app.add_handler(CommandHandler("reminder", cmd_reminder))
     app.add_handler(CommandHandler("checkin", cmd_checkin))
     app.add_handler(CommandHandler("mood", cmd_checkin))
+    app.add_handler(CommandHandler("miniapp", cmd_miniapp))
 
     # Fast time presets (fast_set:N)
     app.add_handler(CallbackQueryHandler(handle_fast_set, pattern=r"^fast_set:\d+$"))

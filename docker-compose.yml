@@ -7,6 +7,21 @@ services:
       - BOT_TOKEN=${BOT_TOKEN}
       - DB_PATH=/data/fasting.db
       - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID:-52784970}
+      - DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL:-http://localhost:8791}
+    volumes:
+      - fasting-data:/data
+
+  fasting-web:
+    build: .
+    container_name: fasting-web
+    restart: unless-stopped
+    ports:
+      - "8791:8791"
+    environment:
+      - DB_PATH=/data/fasting.db
+      - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID:-52784970}
+      - DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL:-http://localhost:8791}
+    command: uvicorn web.main:app --host 0.0.0.0 --port 8791
     volumes:
       - fasting-data:/data
 

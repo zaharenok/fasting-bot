@@ -24,6 +24,7 @@ from bot.db import (
     get_admin_stats,
 )
 from bot.utils import format_minutes_short, format_datetime
+from bot.db import save_checkin, get_goal
 
 
 app = FastAPI(title="Fasting Bot Dashboard")
@@ -131,6 +132,74 @@ async def user_stats_page(request: Request):
     stats = get_stats(user["telegram_id"])
     fasts = get_all_completed_fasts(user["telegram_id"])
     return render("stats.html", user=user, stats=stats, fasts=fasts)
+
+
+# ─── Mini App ────────────────────────────────────────────────
+
+@app.get("/miniapp", response_class=HTMLResponse)
+async def miniapp(request: Request):
+    """Serve Telegram Mini App page."""
+    return render("miniapp.html")
+
+
+# ─── Mini App API ────────────────────────────────────────────
+
+from bot.db import get_active_fast_id, start_fast, end_fast, cancel_fast as db_cancel_fast
+
+
+@app.get("/api/mini/{user_id}")
+async def mini_data(user_id: int):
+    """Get all data for mini app: active fast, stats, goal, recent."""
+    user_id_int = int(user_id)
+    active = get_active_fast(user_id_int)
+    stats = get_stats(user_id_int)
+    goal = get_goal(user_id_int)
+    recent = get_fast_history(user_id_int, limit=10)
+
+    return {
+        "active_fast": active,
+        "stats": stats,
+        "goal_minutes": goal,
+        "recent": recent,
+    }
+
+
+@app.post("/api/mini/{user_id}/start")
+async def mini_start(user_id: int):
+    uid = int(user_id)
+    start_fast(uid)
+    return {"ok": True}
+
+
+@app.post("/api/mini/{user_id}/stop")
+async def mini_stop(user_id: int):
+    uid = int(user_id)
+    end_fast(uid)
+    return {"ok": True}
+
+
+@app.post("/api/mini/{user_id}/cancel")
+async def mini_cancel(user_id: int):
+    uid = int(user_id)
+    db_cancel_fast(uid)
+    return {"ok": True}
+
+
+@app.post("/api/mini/{user_id}/checkin")
+async def mini_checkin(user_id: int, data: dict):
+    uid = int(user_id)
+    fast_id = get_active_fast_id(uid) or 0
+    feeling = data.get("feeling", "")
+    energy = data.get("energy", 3)
+    save_checkin(uid, fast_id, feeling, energy)
+    return {"ok": True}
+
+
+@app.get("/api/mini/{user_id}/history")
+async def mini_history(user_id: int):
+    uid = int(user_id)
+    fasts = get_all_completed_fasts(uid)
+    return {"fasts": fasts}
 
 
 # ─── Admin routes ────────────────────────────────────────────
