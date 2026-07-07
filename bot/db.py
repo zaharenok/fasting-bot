@@ -54,6 +54,16 @@ def _init_db(conn: sqlite3.Connection):
             expires_at TEXT,
             used_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS checkins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(telegram_id),
+            fast_id INTEGER REFERENCES fasts(id),
+            created_at TEXT DEFAULT (datetime('now')),
+            feeling TEXT NOT NULL,
+            energy INTEGER DEFAULT 3,
+            note TEXT DEFAULT ''
+        );
     """)
 
     # Migration: add columns that may not exist yet
@@ -300,6 +310,46 @@ def get_stats(telegram_id: int) -> dict:
         "current_fasting": active is not None,
         "current_fasting_minutes": current_min,
     }
+
+
+# ─── Checkins ──────────────────────────────────────────────────
+
+def save_checkin(user_id: int, fast_id: int, feeling: str, energy: int = 3, note: str = "") -> dict:
+    """Save a mood/feeling checkin."""
+    conn = _get_conn()
+    cur = conn.execute(
+        "INSERT INTO checkins (user_id, fast_id, feeling, energy, note) VALUES (?, ?, ?, ?, ?)",
+        (user_id, fast_id, feeling, energy, note),
+    )
+    conn.commit()
+    return {"id": cur.lastrowid, "feeling": feeling, "energy": energy}
+
+
+def get_recent_checkins(user_id: int, limit: int = 10) -> list:
+    conn = _get_conn()
+    cur = conn.execute(
+        "SELECT * FROM checkins WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (user_id, limit),
+    )
+    return [dict(r) for r in cur.fetchall()]
+
+
+def get_checkin_stats(user_id: int) -> dict:
+    conn = _get_conn()
+    cur = conn.execute("""
+        SELECT feeling, COUNT(*) as cnt FROM checkins
+        WHERE user_id = ? AND created_at >= datetime('now', '-30 days')
+        GROUP BY feeling ORDER BY cnt DESC
+    """, (user_id,))
+    rows = cur.fetchall()
+    total = sum(r["cnt"] for r in rows)
+    return {"total": total, "breakdown": {r["feeling"]: r["cnt"] for r in rows}}
+
+
+def get_active_fast_id(user_id: int):
+    """Get the ID of the active fast, if any."""
+    fast = get_active_fast(user_id)
+    return fast["id"] if fast else None
 
 
 # ─── Dashboard Tokens ────────────────────────────────────────
