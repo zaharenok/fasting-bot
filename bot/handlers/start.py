@@ -17,16 +17,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         f"👋 <b>Привет, {user.first_name or 'друг'}!</b>\n\n"
-        "Этот бот помогает отслеживать время без еды.\n"
-        "Нажимай команды — я считаю.\n\n"
-        "🕐 <b>Команды</b>\n"
+        "Я помогаю отслеживать время без еды.\n"
+        "Нажимай кнопки или пиши команды.\n\n"
+        "🕐 <b>Основное</b>\n"
         "▸ /fast — начать голодание\n"
-        "▸ /eat — поел, закончить голод\n"
-        "▸ /status — сколько уже без еды\n"
+        "▸ /eat — закончить фаст\n"
+        "▸ /status — сколько без еды\n"
+        "▸ /cancel — отменить (с подтверждением)\n\n"
+        "⚙️ <b>Настройки</b>\n"
+        "▸ /mode — режим (16:8, OMAD...)\n"
+        "▸ /goal — цель голодания\n"
+        "▸ /reminder — напоминания\n\n"
+        "📊 <b>Аналитика</b>\n"
         "▸ /stats — статистика\n"
         "▸ /history — история фастов\n"
-        "▸ /cancel — отменить текущий фаст\n\n"
-        "Попробуй: нажми <b>/fast</b> когда последний раз поел 😉"
+        "▸ /edit — исправить время фаста\n"
+        "▸ /checkin — самочувствие\n"
+        "▸ /electrolytes — электролиты, советы\n\n"
+        "🌐 <b>Веб</b>\n"
+        "▸ /dashboard — дашборд в браузере\n"
+        "▸ /miniapp — Mini App в Telegram\n"
+        "▸ /help — все команды\n\n"
+        "Попробуй: нажми <b>/fast</b> 😉"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -37,6 +49,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [
             InlineKeyboardButton("📊 Статистика", callback_data="cmd_stats"),
             InlineKeyboardButton("📋 История", callback_data="cmd_history"),
+        ],
+        [
+            InlineKeyboardButton("🎯 Режим /mode", callback_data="cmd_mode"),
+            InlineKeyboardButton("⏰ /reminder", callback_data="cmd_reminder"),
+        ],
+        [
+            InlineKeyboardButton("🧂 Электролиты", callback_data="cmd_electrolytes"),
+            InlineKeyboardButton("📝 Чекин", callback_data="cmd_checkin"),
         ],
     ])
 

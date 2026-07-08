@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from bot.db import start_fast, end_fast, get_active_fast, get_stats, get_fasting_mode
+from bot.db import start_fast, get_active_fast, get_stats, get_fasting_mode
 from bot.utils import format_duration
 
 
@@ -165,52 +165,143 @@ async def cmd_fast(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """End the current fasting period (user ate)."""
+    """End the current fasting period (user ate). Shows time selector."""
     user_id = update.effective_user.id
-    record = end_fast(user_id)
+    active = get_active_fast(user_id)
 
-    if not record:
+    if not active:
         text = "❌ <b>Нет активного голодания.</b> Начни с /fast"
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🕐 Начать фаст", callback_data="cmd_fast")]
         ])
+        await _reply(update, text, keyboard)
+        return
+
+    # Show time selector for when they ate
+    text = (
+        "🍽 <b>Когда ты поел?</b>\n\n"
+        "Выбери, сколько времени прошло с тех пор 👇"
+    )
+    await _reply(update, text, _eat_selector_page1())
+
+
+def _eat_selector_page1() -> InlineKeyboardMarkup:
+    """Time selector for /eat."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⚡ Сейчас", callback_data="eat_set:0"),
+         InlineKeyboardButton("15 мин назад", callback_data="eat_set:15"),
+         InlineKeyboardButton("30 мин назад", callback_data="eat_set:30")],
+        [InlineKeyboardButton("1 час назад", callback_data="eat_set:60"),
+         InlineKeyboardButton("2 часа назад", callback_data="eat_set:120"),
+         InlineKeyboardButton("4 часа назад", callback_data="eat_set:240")],
+        [InlineKeyboardButton("▶️ Больше →", callback_data="eat_more"),
+         InlineKeyboardButton("✏️ Своё время", callback_data="eat_custom")],
+    ])
+
+
+def _eat_selector_page2() -> InlineKeyboardMarkup:
+    """Page 2: earlier eat times."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("6 часов назад", callback_data="eat_set:360"),
+         InlineKeyboardButton("8 часов назад", callback_data="eat_set:480"),
+         InlineKeyboardButton("12 часов назад", callback_data="eat_set:720")],
+        [InlineKeyboardButton("← Назад", callback_data="eat_back")],
+    ])
+
+
+async def handle_eat_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle eat_set:MINUTES callback — end fast N minutes ago."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    minutes_ago = int(query.data.split(":")[1])
+
+    ended_at = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+    await _end_fast_and_reply(update, user_id, ended_at)
+
+
+async def handle_eat_custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Prompt user to type their own eat time."""
+    query = update.callback_query
+    await query.answer()
+    text = (
+        "🍽 <b>Напиши, когда поел</b>\n\n"
+        "Форматы:\n"
+        "<code>14:30</code> — сегодня\n"
+        "<code>14:30 вчера</code>\n"
+        "<code>30 минут назад</code>\n"
+        "<code>2026-07-07 12:00</code>"
+    )
+    await query.edit_message_text(text, parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("← К выбору времени", callback_data="eat_selector")]
+        ]))
+
+
+async def show_eat_selector(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show page 1 of eat time selector."""
+    await update.callback_query.answer()
+    text = "🍽 <b>Когда ты поел?</b>\n\nВыбери время 👇"
+    await _edit(update, text, _eat_selector_page1())
+
+
+async def show_eat_more(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show page 2 of eat time selector."""
+    await update.callback_query.answer()
+    text = "🍽 <b>Ещё варианты:</b>"
+    await _edit(update, text, _eat_selector_page2())
+
+
+async def _end_fast_and_reply(update: Update, user_id: int, ended_at: datetime):
+    """End fast at given time and show confirmation."""
+    from bot.db import end_fast_at
+
+    record = end_fast_at(user_id, ended_at)
+    if not record:
+        text = "❌ <b>Нет активного голодания.</b> Начни с /fast"
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🕐 Начать фаст", callback_data="cmd_fast")],
+        ])
+        await _reply(update, text, keyboard)
+        return
+
+    duration_min = record["duration_minutes"]
+    started = datetime.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+
+    stats = get_stats(user_id)
+    best = stats.get("longest_duration_minutes", 0) or 0
+    avg = stats.get("avg_duration_minutes", 0) or 0
+
+    text = (
+        "🍽 <b>Фаст завершён!</b>\n"
+        f"⏳ Длился: <b>{format_duration(duration_min)}</b>\n"
+        f"Начало: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
+        f"Конец:  <code>{ended_at.strftime('%H:%M %d.%m')}</code>\n"
+    )
+
+    if minutes_ago := int((datetime.now(timezone.utc) - ended_at).total_seconds() / 60) > 2:
+        text += "⏪ <i>Время установлено вручную</i>\n"
+
+    mode = get_fasting_mode(user_id)
+    if mode and mode["key"]:
+        fast_target = mode["fast_hours"] * 60
+        eat_window = mode["eat_hours"] * 60
+        if duration_min >= fast_target and duration_min <= fast_target + eat_window:
+            text += f"✅ Вписался в окно еды ({mode['label']})!\n"
+        elif duration_min < fast_target:
+            remaining = fast_target - duration_min
+            text += f"⏳ До открытия окна: {format_duration(remaining)}\n"
+        else:
+            text += "⚠️ Вышел за пределы окна еды\n"
+
+    if duration_min >= best and best > 0:
+        text += "🏆 <b>Новый рекорд!</b> Ты никогда не был так долго без еды!\n"
     else:
-        duration_min = record["duration_minutes"]
-        ended = datetime.fromisoformat(record["ended_at"].replace("Z", "+00:00"))
-        started = datetime.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+        text += f"🏆 Лучший результат: {format_duration(best)}\n"
 
-        stats = get_stats(user_id)
-        best = stats.get("longest_duration_minutes", 0) or 0
-        avg = stats.get("avg_duration_minutes", 0) or 0
+    text += f"📊 Средний фаст: {format_duration(int(avg))}"
 
-        text = (
-            "🍽 <b>Фаст завершён!</b>\n"
-            f"⏳ Длился: <b>{format_duration(duration_min)}</b>\n"
-        )
-
-        # Check if within eating window
-        mode = get_fasting_mode(user_id)
-        if mode and mode["key"]:
-            from datetime import timedelta as td
-            fast_target = mode["fast_hours"] * 60
-            eat_window = mode["eat_hours"] * 60
-            if duration_min >= fast_target and duration_min <= fast_target + eat_window:
-                text += f"✅ Вписался в окно еды ({mode['label']})!\n"
-            elif duration_min < fast_target:
-                remaining = fast_target - duration_min
-                text += f"⏳ До открытия окна: {format_duration(remaining)}\n"
-            else:
-                text += "⚠️ Вышел за пределы окна еды\n"
-
-        if duration_min >= best and best > 0:
-            text += "🏆 <b>Новый рекорд!</b> Ты никогда не был так долго без еды!\n"
-
-        text += (
-            f"\n📊 Средний фаст: <b>{format_duration(int(avg))}</b>\n"
-            f"🏆 Рекорд: <b>{format_duration(best)}</b>"
-        )
-        keyboard = _action_keyboard()
-
+    keyboard = _action_keyboard()
     await _reply(update, text, keyboard)
 
 

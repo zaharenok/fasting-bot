@@ -256,22 +256,26 @@ def start_fast(telegram_id: int, started_at: Optional[str] = None) -> dict:
 
 def end_fast(telegram_id: int) -> Optional[dict]:
     """End current active fast. Returns updated fast or None."""
+    return end_fast_at(telegram_id, utcnow())
+
+
+def end_fast_at(telegram_id: int, ended_at: datetime) -> Optional[dict]:
+    """End current active fast at a specific time. Returns updated fast or None."""
     conn = _get_conn()
     active = get_active_fast(telegram_id)
     if not active:
         return None
 
-    now = utcnow()
-    started = datetime.fromisoformat(active["started_at"])
-    duration = int((now - started).total_seconds() / 60)
+    started = datetime.fromisoformat(active["started_at"].replace("Z", "+00:00"))
+    duration = int((ended_at - started).total_seconds() / 60)
 
     conn.execute(
         "UPDATE fasts SET ended_at = ?, duration_minutes = ? WHERE id = ?",
-        (now.isoformat(), duration, active["id"]),
+        (ended_at.isoformat(), duration, active["id"]),
     )
     conn.commit()
 
-    return {**active, "ended_at": now.isoformat(), "duration_minutes": duration}
+    return {**active, "ended_at": ended_at.isoformat(), "duration_minutes": duration}
 
 
 def get_active_fast(telegram_id: int) -> Optional[dict]:
@@ -282,6 +286,32 @@ def get_active_fast(telegram_id: int) -> Optional[dict]:
     )
     row = cur.fetchone()
     return dict(row) if row else None
+
+
+def get_fast_by_id(fast_id: int, user_id: int) -> Optional[dict]:
+    conn = _get_conn()
+    cur = conn.execute("SELECT * FROM fasts WHERE id = ? AND user_id = ?", (fast_id, user_id))
+    row = cur.fetchone()
+    return dict(row) if row else None
+
+
+def update_fast_times(fast_id: int, user_id: int, started_at: Optional[str] = None, ended_at: Optional[str] = None) -> bool:
+    fast = get_fast_by_id(fast_id, user_id)
+    if not fast:
+        return False
+    new_start = started_at or fast["started_at"]
+    new_end = ended_at or fast["ended_at"]
+    if new_end:
+        s = datetime.fromisoformat(new_start.replace("Z", "+00:00"))
+        e = datetime.fromisoformat(new_end.replace("Z", "+00:00"))
+        duration = int((e - s).total_seconds() / 60)
+    else:
+        duration = None
+    conn = _get_conn()
+    conn.execute("UPDATE fasts SET started_at = ?, ended_at = ?, duration_minutes = ? WHERE id = ?",
+                 (new_start, new_end, duration, fast_id))
+    conn.commit()
+    return True
 
 
 def cancel_fast(telegram_id: int) -> bool:

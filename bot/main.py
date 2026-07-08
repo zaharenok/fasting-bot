@@ -29,6 +29,10 @@ from bot.handlers.fast import (
     handle_custom_time as fast_handle_custom,
     handle_cancel_confirm,
     handle_cancel_abort,
+    handle_eat_set,
+    handle_eat_custom,
+    show_eat_selector,
+    show_eat_more,
 )
 from bot.handlers.status import cmd_status
 from bot.handlers.stats import cmd_stats
@@ -41,6 +45,8 @@ from bot.config import BOT_TOKEN
 from bot.handlers.reminders import cmd_reminder, handle_reminder_callback, handle_reminder_time_input
 from bot.handlers.checkin import cmd_checkin, handle_feeling, handle_energy, feel_stats
 from bot.handlers.mode import cmd_mode, handle_mode_set
+from bot.handlers.electrolytes import cmd_electrolytes
+from bot.handlers.edit import cmd_edit, handle_edit_select, handle_edit_start, handle_edit_end, handle_edit_text
 from bot.scheduler import scheduler_tick
 from bot.db import get_active_fast, start_fast, get_user
 from bot.handlers.fast import _parse_time, _action_keyboard
@@ -69,6 +75,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "cmd_goal": cmd_goal,
         "cmd_reminder": cmd_reminder,
         "cmd_checkin": cmd_checkin,
+        "cmd_mode": cmd_mode,
+        "cmd_electrolytes": cmd_electrolytes,
+        "cmd_edit": cmd_edit,
         "feel_stats": feel_stats,
         "fast_selector": show_selector,
         "fast_more": show_more,
@@ -181,9 +190,17 @@ def main():
     app.add_handler(CommandHandler("miniapp", cmd_miniapp))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("mode", cmd_mode))
+    app.add_handler(CommandHandler("electrolytes", cmd_electrolytes))
+    app.add_handler(CommandHandler("edit", cmd_edit))
 
     # Fast time presets (fast_set:N)
     app.add_handler(CallbackQueryHandler(handle_fast_set, pattern=r"^fast_set:\d+$"))
+
+    # Eat time presets (eat_set:N)
+    app.add_handler(CallbackQueryHandler(handle_eat_set, pattern=r"^eat_set:\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_eat_custom, pattern=r"^eat_custom$"))
+    app.add_handler(CallbackQueryHandler(show_eat_selector, pattern=r"^eat_selector$|^eat_back$"))
+    app.add_handler(CallbackQueryHandler(show_eat_more, pattern=r"^eat_more$"))
 
     # Goal callbacks
     app.add_handler(CallbackQueryHandler(handle_goal_set, pattern=r"^goal_set:\d+$"))
@@ -203,6 +220,11 @@ def main():
     # Cancel confirmation
     app.add_handler(CallbackQueryHandler(handle_cancel_confirm, pattern=r"^cancel_confirm$"))
     app.add_handler(CallbackQueryHandler(handle_cancel_abort, pattern=r"^cancel_abort$"))
+
+    # Edit callbacks
+    app.add_handler(CallbackQueryHandler(handle_edit_select, pattern=r"^edit_fast:\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_edit_start, pattern=r"^edit_start:\d+$"))
+    app.add_handler(CallbackQueryHandler(handle_edit_end, pattern=r"^edit_end:\d+$"))
 
     # Other inline buttons
     app.add_handler(CallbackQueryHandler(button_callback))
