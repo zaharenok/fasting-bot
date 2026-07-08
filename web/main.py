@@ -57,6 +57,78 @@ def _get_user_from_request(request: Request) -> Optional[dict]:
 
 # ─── Public routes ───────────────────────────────────────────
 
+@app.get("/admin/login")
+async def admin_login(token: str = Query(...)):
+    """One-time admin login via dashboard token. Only for ADMIN_TELEGRAM_ID."""
+    user = use_dashboard_token(token)
+    if not user:
+        return HTMLResponse("❌ Ссылка недействительна или истекла", status_code=401)
+
+    if user["telegram_id"] != ADMIN_TELEGRAM_ID:
+        return HTMLResponse("🚫 Доступ только для администратора", status_code=403)
+
+    # Set cookie (same as regular login) and redirect to admin
+    resp = RedirectResponse(url="/admin/", status_code=302)
+    resp.set_cookie(
+        key="telegram_id",
+        value=str(user["telegram_id"]),
+        max_age=86400 * 30,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+    )
+    return resp
+
+
+@app.get("/dashboard/{telegram_id}", response_class=HTMLResponse)
+async def direct_dashboard(telegram_id: int, request: Request):
+    """Permanent dashboard link by telegram_id. No auth needed (single-user mode)."""
+    user = get_user(telegram_id)
+    if not user:
+        return HTMLResponse("❌ Пользователь не найден", status_code=404)
+
+    active = get_active_fast(telegram_id)
+    stats = get_stats(telegram_id)
+    recent = get_fast_history(telegram_id, limit=10)
+    now = datetime.now(timezone.utc)
+
+    current_minutes = 0
+    if active:
+        started = datetime.fromisoformat(active["started_at"].replace("Z", "+00:00"))
+        current_minutes = int((now - started).total_seconds() / 60)
+
+    return render(
+        "dashboard.html",
+        user=user,
+        active=active,
+        current_minutes=current_minutes,
+        stats=stats,
+        recent=recent,
+        now_iso=now.isoformat(),
+    )
+
+
+@app.get("/history/{telegram_id}", response_class=HTMLResponse)
+async def direct_history(telegram_id: int):
+    """Permanent history page by telegram_id."""
+    user = get_user(telegram_id)
+    if not user:
+        return HTMLResponse("❌ Пользователь не найден", status_code=404)
+    fasts = get_all_completed_fasts(telegram_id)
+    return render("history.html", user=user, fasts=fasts)
+
+
+@app.get("/stats/{telegram_id}", response_class=HTMLResponse)
+async def direct_stats(telegram_id: int):
+    """Permanent stats page by telegram_id."""
+    user = get_user(telegram_id)
+    if not user:
+        return HTMLResponse("❌ Пользователь не найден", status_code=404)
+    stats = get_stats(telegram_id)
+    fasts = get_all_completed_fasts(telegram_id)
+    return render("stats.html", user=user, stats=stats, fasts=fasts)
+
+
 @app.get("/login")
 async def login(token: str = Query(...)):
     """One-time login via dashboard token."""

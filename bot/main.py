@@ -35,9 +35,12 @@ from bot.handlers.stats import cmd_stats
 from bot.handlers.history import cmd_history
 from bot.handlers.dashboard import cmd_dashboard
 from bot.handlers.miniapp import cmd_miniapp
+from bot.handlers.help import cmd_help
 from bot.handlers.goal import cmd_goal, handle_goal_set, handle_goal_off
+from bot.config import BOT_TOKEN
 from bot.handlers.reminders import cmd_reminder, handle_reminder_callback, handle_reminder_time_input
 from bot.handlers.checkin import cmd_checkin, handle_feeling, handle_energy, feel_stats
+from bot.handlers.mode import cmd_mode, handle_mode_set
 from bot.scheduler import scheduler_tick
 from bot.db import get_active_fast, start_fast, get_user
 from bot.handlers.fast import _parse_time, _action_keyboard
@@ -176,6 +179,8 @@ def main():
     app.add_handler(CommandHandler("checkin", cmd_checkin))
     app.add_handler(CommandHandler("mood", cmd_checkin))
     app.add_handler(CommandHandler("miniapp", cmd_miniapp))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("mode", cmd_mode))
 
     # Fast time presets (fast_set:N)
     app.add_handler(CallbackQueryHandler(handle_fast_set, pattern=r"^fast_set:\d+$"))
@@ -191,6 +196,9 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_feeling, pattern=r"^feel:"))
     app.add_handler(CallbackQueryHandler(handle_energy, pattern=r"^energy:\d+$"))
     app.add_handler(CallbackQueryHandler(feel_stats, pattern=r"^feel_stats$"))
+
+    # Mode callback
+    app.add_handler(CallbackQueryHandler(handle_mode_set, pattern=r"^mode_set:"))
 
     # Cancel confirmation
     app.add_handler(CallbackQueryHandler(handle_cancel_confirm, pattern=r"^cancel_confirm$"))

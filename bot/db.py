@@ -71,6 +71,7 @@ def _init_db(conn: sqlite3.Connection):
         "ALTER TABLE users ADD COLUMN goal_minutes INTEGER",
         "ALTER TABLE users ADD COLUMN morning_reminder TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN goal_reminder_minutes INTEGER DEFAULT 30",
+        "ALTER TABLE users ADD COLUMN fasting_mode TEXT DEFAULT ''",
     ]
     for sql in migs:
         try:
@@ -183,6 +184,34 @@ def get_reminder_info(telegram_id: int) -> dict:
         "morning": row["morning_reminder"] if row["morning_reminder"] else None,
         "goal_reminder": row["goal_reminder_minutes"],
     }
+
+
+# ─── Fasting Modes ────────────────────────────────────────────
+
+FASTING_MODES = [
+    ("", 0, 0, "Без режима — просто считаю часы"),
+    ("16:8", 16, 8, "16:8 — классика 🔥"),
+    ("18:6", 18, 6, "18:6 — продвинутый ⚡"),
+    ("20:4", 20, 4, "20:4 — хардкор 💪"),
+    ("OMAD", 23, 1, "OMAD — один приём в день 🍽️"),
+]
+
+
+def get_fasting_mode(telegram_id: int) -> Optional[dict]:
+    conn = _get_conn()
+    cur = conn.execute("SELECT fasting_mode FROM users WHERE telegram_id = ?", (telegram_id,))
+    row = cur.fetchone()
+    mode_key = row["fasting_mode"] if row and row["fasting_mode"] else ""
+    for key, fast_h, eat_h, label in FASTING_MODES:
+        if key == mode_key:
+            return {"key": key, "fast_hours": fast_h, "eat_hours": eat_h, "label": label}
+    return None
+
+
+def set_fasting_mode(telegram_id: int, mode_key: str):
+    conn = _get_conn()
+    conn.execute("UPDATE users SET fasting_mode = ? WHERE telegram_id = ?", (mode_key, telegram_id))
+    conn.commit()
 
 
 # ─── Scheduler helpers ───────────────────────────────────────

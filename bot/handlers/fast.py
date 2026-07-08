@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from bot.db import start_fast, end_fast, get_active_fast, get_stats
+from bot.db import start_fast, end_fast, get_active_fast, get_stats, get_fasting_mode
 from bot.utils import format_duration
 
 
@@ -187,6 +187,21 @@ async def cmd_eat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🍽 <b>Фаст завершён!</b>\n"
             f"⏳ Длился: <b>{format_duration(duration_min)}</b>\n"
         )
+
+        # Check if within eating window
+        mode = get_fasting_mode(user_id)
+        if mode and mode["key"]:
+            from datetime import timedelta as td
+            fast_target = mode["fast_hours"] * 60
+            eat_window = mode["eat_hours"] * 60
+            if duration_min >= fast_target and duration_min <= fast_target + eat_window:
+                text += f"✅ Вписался в окно еды ({mode['label']})!\n"
+            elif duration_min < fast_target:
+                remaining = fast_target - duration_min
+                text += f"⏳ До открытия окна: {format_duration(remaining)}\n"
+            else:
+                text += "⚠️ Вышел за пределы окна еды\n"
+
         if duration_min >= best and best > 0:
             text += "🏆 <b>Новый рекорд!</b> Ты никогда не был так долго без еды!\n"
 
@@ -339,12 +354,26 @@ async def _start_fast_and_reply(update: Update, user_id: int, started_at: str, e
     else:
         record = start_fast(user_id, started_at=started_at)
         started = datetime.fromisoformat(record["started_at"].replace("Z", "+00:00"))
+        dur = int((datetime.now(timezone.utc) - started).total_seconds() / 60)
+
         text = (
             "🕐 <b>Голодание начато!</b>\n\n"
             f"Последний приём пищи: <code>{started.strftime('%H:%M %d.%m')}</code>\n"
-            f"⏳ <b>Ты уже {format_duration(int((datetime.now(timezone.utc) - started).total_seconds() / 60))} без еды</b>\n\n"
-            "Нажми /eat когда поешь."
+            f"⏳ <b>Ты уже {format_duration(dur)} без еды</b>\n"
         )
+
+        # Add mode info
+        mode = get_fasting_mode(user_id)
+        if mode and mode["key"]:
+            fast_h = mode["fast_hours"]
+            window_end = started + timedelta(hours=fast_h)
+            text += (
+                f"📋 Режим: <b>{mode['label']}</b>\n"
+                f"🎯 Окно еды: с <code>{window_end.strftime('%H:%M %d.%m')}</code>\n"
+                f"    до <code>{(window_end + timedelta(hours=mode['eat_hours'])).strftime('%H:%M %d.%m')}</code>\n"
+            )
+
+        text += "\nНажми /eat когда поешь."
         keyboard = _action_keyboard()
 
     if edit:

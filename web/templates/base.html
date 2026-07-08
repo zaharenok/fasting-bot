@@ -30,9 +30,9 @@
         <div class="max-w-4xl mx-auto flex items-center justify-between">
             <a href="/dashboard" class="text-lg font-semibold">🕐 Fasting Bot</a>
             <div class="flex gap-4 text-sm">
-                <a href="/dashboard" class="text-gray-400 hover:text-white">Дашборд</a>
-                <a href="/history" class="text-gray-400 hover:text-white">История</a>
-                <a href="/stats" class="text-gray-400 hover:text-white">Статистика</a>
+                <a href="/dashboard/{{ user.telegram_id }}" class="text-gray-400 hover:text-white">Дашборд</a>
+                <a href="/history/{{ user.telegram_id }}" class="text-gray-400 hover:text-white">История</a>
+                <a href="/stats/{{ user.telegram_id }}" class="text-gray-400 hover:text-white">Статистика</a>
                 {% if user and user.telegram_id == 52784970 %}
                 <a href="/admin/" class="text-amber-400 hover:text-amber-300">Админ</a>
                 {% endif %}

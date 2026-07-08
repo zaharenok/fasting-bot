@@ -1,28 +1,20 @@
-"""Handler for /dashboard command."""
+"""Handler for /dashboard command — sends permanent direct link."""
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from bot.config import DASHBOARD_BASE_URL
-from bot.db import create_dashboard_token
 
 
 async def cmd_dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send a one-time dashboard link."""
+    """Send a permanent dashboard link based on user's telegram_id."""
     user_id = update.effective_user.id
-    token_data = create_dashboard_token(user_id)
-    if not token_data:
-        text = "❌ Не удалось создать ссылку. Попробуй позже."
-        await _reply(update, text)
-        return
-
-    token = token_data["token"]
-    url = f"{DASHBOARD_BASE_URL}/login?token={token}"
+    url = f"{DASHBOARD_BASE_URL}/dashboard/{user_id}"
 
     text = (
         "🌐 <b>Твой дашборд</b>\n\n"
-        "Ссылка действует 24 часа, одноразовая:\n"
-        f"<code>{url}</code>\n\n"
+        f"Постоянная ссылка (никогда не сгорает):\n"
+        f"{url}\n\n"
         "Там ты увидишь таймер, историю и графики."
     )
 
